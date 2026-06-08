@@ -1,0 +1,10 @@
+# DFX reconfigurable-module allowlist (P3 coarse action dimension).
+# sha256(partial .bin)  module-name
+# Only modules listed here may be hot-swapped into the RP via
+# `agentctl.py load-module`. Mirrors the P2 frame guard / measured-load gate:
+# the agent physically cannot fpgautil -f Partial a module that isn't measured.
+#
+# Static design = zynq_xpart DFX (PS7 + NEORV32 + XBUS + AXI-GPIO mailbox @0x41200000),
+# RP cell = u_soc/wb_tpu_inst. Observable = mailbox word @0x41200000.
+deb7318efae7f757c5406db6f685c9b734fe09509922a354b716caaa18221835  rm1_tpu
+3441d773f1f7336e7627b1b8db2a3af11b5f9176be2f59c041f8f427f621f3df  rm2_alt

@@ -36,7 +36,13 @@ Executor path = **Linux `/dev/mem` + HWICAP** (no A9 AMP, no soft-core in the lo
 ## Layout
 
 - `firmware/icaphw.c` — board-side `/dev/mem` HWICAP executor (the only from-scratch code).
-- `host/agentctl.py` — host command surface: `ensure-linux` / `setup` / `perceive` / `act` / `verify`.
+- `host/agentctl.py` — host command surface: `ensure-linux` / `setup` / `perceive` /
+  `act` / `verify` / `loop` (fine: ICAP LUT-INIT edit) + `load-module` (coarse:
+  whole-RP hot-swap via Linux partial reconfig — P3, see `docs/dfx.md`).
+- `board/dfx/`, `vivado/dfx/`, `board/dfx_allowlist.sha256` — P3 DFX coarse action:
+  reuse the zynq_xpart DFX static (NEORV32 + AXI-GPIO mailbox) + two RP modules
+  (`rm1_tpu`↔`rm2_alt`); `fpgautil -f Partial` swaps them live (~19 ms, no reset),
+  allowlist-gated. **Linux partial reconfig verified working** — no U-Boot fallback needed.
 - `host/hwicap-make-framewrite.py` — builds the single-frame write seq from `lut_A.bit`/`lut_B.bit`.
 - `host/bit2bin.py` — convert a Vivado `.bit` to the byte-swapped `.bin` the Linux
   `fpga_manager` requires (it rejects a raw `.bit`: "must be a byte swapped .bin file").

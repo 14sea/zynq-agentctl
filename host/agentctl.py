@@ -13,6 +13,9 @@ Verbs:
   act <0|1>             drive the LUT INIT[0] to the target state via ICAP edit
   verify <0|1>          perceive and compare to target -> exit 0 ok / 3 mismatch
   loop  <0|1>           act + verify with one retry (full closed loop)
+  load-module <name>    COARSE action (P3): hot-swap a whole RP module via Linux
+                        partial reconfig (fpgautil -f Partial), allowlist-gated,
+                        then read the mailbox observable to confirm the swap.
 
 All board mutation goes through /tmp/icaphw (this project's /dev/mem executor).
 File pushes reuse uart-push-b64.py; recovery to U-Boot is out of scope here
@@ -46,6 +49,22 @@ ARTIFACTS = [
 ]
 
 PROMPT = b"# "
+
+# ---- P3: DFX coarse action (whole-module hot-swap) -----------------------
+# The agent has two action dimensions: FINE (ICAP LUT-INIT edit, act/loop above)
+# and COARSE (swap a whole reconfigurable module via Linux partial reconfig).
+# The RP lives in the zynq_xpart DFX static design (PS7 + NEORV32 + AXI-GPIO
+# mailbox @0x41200000, RP cell u_soc/wb_tpu_inst). The static must already be on
+# the PL (loaded reliably via U-Boot `fpga loadb board/dfx/dfx_full.bit`, then
+# custom-boot into Linux preserving the PL; see docs/dfx.md). The partial .bin is
+# a byte-swapped fpga_manager image (host/bit2bin.py) loaded with -f Partial.
+DFX_OBSERVABLE = 0x41200000           # NEORV32 mailbox -> identifies the live RM
+DFX_ALLOWLIST = os.path.join(ROOT, "board/dfx_allowlist.sha256")
+DFX_MODULES = {
+    # name      host .bin                         expected mailbox value
+    "rm1_tpu": ("board/dfx/rm1_tpu_partial.bin", 0x001E0046),
+    "rm2_alt": ("board/dfx/rm2_alt_partial.bin", 0x00BB00CC),
+}
 
 
 def open_port():
@@ -122,6 +141,97 @@ def push(src, dest):
         [sys.executable, os.path.join(HERE, "uart-push-b64.py"),
          "--in", src, "--dest", dest, "--timeout", "400"],
         check=True)
+
+
+def push_chunked(s, src, dest, chunk=131072):
+    """Reliable large-file push: split -> per-chunk uart-push-b64 w/ 3 retries ->
+    cat -> md5 verify. Single base64 pushes of ~0.6-2 MB are flaky on the CH340
+    (tiny RX FIFO, no flow control); chunking + retry is the proven path."""
+    want = host_md5(src)
+    if board_md5(s, dest) == want:
+        print(f"[push] {dest} up-to-date ({want[:8]})")
+        return
+    import tempfile, glob
+    d = tempfile.mkdtemp(prefix="agc_")
+    subprocess.run(["split", "-b", str(chunk), "-d", src, os.path.join(d, "c")], check=True)
+    chunks = sorted(glob.glob(os.path.join(d, "c*")))
+    bdir = dest + ".d"
+    sh(s, f"rm -rf {bdir} && mkdir -p {bdir}")
+    for c in chunks:
+        bc = f"{bdir}/{os.path.basename(c)}"
+        for attempt in (1, 2, 3):
+            rc = subprocess.call(
+                [sys.executable, os.path.join(HERE, "uart-push-b64.py"),
+                 "--in", c, "--dest", bc, "--timeout", "120"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if rc == 0:
+                break
+        else:
+            raise RuntimeError(f"chunk {bc} failed after 3 tries")
+        print(f"[push] {os.path.basename(c)} ok")
+    s.reset_input_buffer()  # uart-push-b64 reopened the port
+    sh(s, f"cat {bdir}/c* > {dest}; rm -rf {bdir}")
+    got = board_md5(s, dest)
+    if got != want:
+        raise RuntimeError(f"md5 mismatch after push: board {got} != host {want}")
+    print(f"[push] {dest} verified ({want[:8]})")
+
+
+def dfx_allowlisted(binpath):
+    """host-side measured gate: sha256(partial.bin) must be in dfx_allowlist."""
+    h = hashlib.sha256(open(binpath, "rb").read()).hexdigest()
+    allow = {}
+    if os.path.exists(DFX_ALLOWLIST):
+        for line in open(DFX_ALLOWLIST):
+            line = line.strip()
+            if line and not line.startswith("#"):
+                allow[line.split()[0].lower()] = True
+    return h in allow, h
+
+
+def read_observable(s, addr=DFX_OBSERVABLE):
+    out = sh(s, f"devmem {addr} 32")
+    m = re.search(r"0x([0-9A-Fa-f]{1,8})", out)
+    return int(m.group(1), 16) if m else None
+
+
+def load_module(name):
+    """COARSE action: hot-swap RP module <name> via Linux partial reconfig."""
+    if name not in DFX_MODULES:
+        print(f"[load-module] unknown module '{name}' (have: {', '.join(DFX_MODULES)})")
+        return 2
+    rel, expect = DFX_MODULES[name]
+    src = os.path.join(ROOT, rel)
+    if not os.path.exists(src):
+        print(f"[load-module] missing {src} — build/copy the DFX partials first")
+        return 2
+    ok, h = dfx_allowlisted(src)
+    print(f"[load-module] sha256({name}) = {h}")
+    if not ok:
+        print("[load-module] REFUSED — not in dfx_allowlist.sha256 (unmeasured module)")
+        return 3
+    s = open_port()
+    if not at_prompt(s):
+        s.close(); print("[load-module] not at Linux shell — run ensure-linux"); sys.exit(2)
+    before = read_observable(s)
+    dest = f"/tmp/{name}.bin"
+    push_chunked(s, src, dest)
+    print(f"[load-module] fpgautil -b {dest} -f Partial ...")
+    out = sh(s, f"fpgautil -b {dest} -f Partial; echo RC=$?", timeout=20)
+    print("  " + out.replace("\n", "\n  "))
+    if "RC=0" not in out:
+        s.close(); print("[load-module] fpgautil FAILED"); return 3
+    after = read_observable(s)
+    state = sh(s, "cat /sys/class/fpga_manager/fpga0/state").strip()
+    s.close()
+    hx = lambda v: "None" if v is None else f"0x{v:08X}"
+    print(f"[load-module] observable 0x{DFX_OBSERVABLE:08x}: "
+          f"{hx(before)} -> {hx(after)} (expect 0x{expect:08X}); state={state}")
+    if after == expect:
+        print(f"[load-module] OK — '{name}' live, PS/soft-core not reset")
+        return 0
+    print("[load-module] MISMATCH — observable does not match expected module")
+    return 3
 
 
 def setup():
@@ -211,6 +321,8 @@ def main():
     sub.add_parser("perceive")
     for v in ("act", "verify", "loop"):
         p = sub.add_parser(v); p.add_argument("target", type=int, choices=(0, 1))
+    lm = sub.add_parser("load-module")
+    lm.add_argument("name", choices=tuple(DFX_MODULES))
     args = ap.parse_args()
 
     if args.op == "ensure-linux":
@@ -225,6 +337,8 @@ def main():
         sys.exit(verify(args.target))
     elif args.op == "loop":
         sys.exit(loop(args.target))
+    elif args.op == "load-module":
+        sys.exit(load_module(args.name))
 
 
 if __name__ == "__main__":
