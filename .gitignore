@@ -14,3 +14,10 @@ seq/*.bin
 .env/
 board/*.bin
 board/*.dtb
+
+# Vivado build outputs (huge, regenerable)
+vivado/*/build/
+vivado/*/*.jou
+vivado/*/*.log
+vivado/*/.Xil/
+*.bits
