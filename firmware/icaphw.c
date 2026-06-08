@@ -133,6 +133,44 @@ static int wf_write(const uint8_t *buf, size_t nbytes) {
     return (int)i;
 }
 
+/* ---- structural safety guard: confine ICAP writes to the sandbox LUT frames ----
+   A lut-tune.py seq has a Type1 FAR write (0x30002001, FAR in the next word) and
+   a Type2 FDRI write (0x50xxxxxx, word count in low bits). We refuse any seq whose
+   FAR is outside [FAR_LO,FAR_HI) or whose FDRI exceeds MAX_FDRI words, so the agent
+   physically cannot rewrite CRAM outside the ring-oscillator tuning LUT's sandbox.
+   Defaults = ro_tune sandbox; override via env ICAPHW_FAR_LO/HI (hex), ICAPHW_MAX_FDRI. */
+static uint32_t be32(const uint8_t *p) {
+    return ((uint32_t)p[0]<<24)|((uint32_t)p[1]<<16)|((uint32_t)p[2]<<8)|p[3];
+}
+static unsigned long env_u(const char *k, unsigned long d, int base) {
+    const char *v = getenv(k); return v ? strtoul(v, 0, base) : d;
+}
+static int validate_seq(const uint8_t *buf, size_t nbytes) {
+    unsigned long lo = env_u("ICAPHW_FAR_LO", 0x1420, 16);
+    unsigned long hi = env_u("ICAPHW_FAR_HI", 0x1424, 16);   /* exclusive */
+    unsigned long maxf = env_u("ICAPHW_MAX_FDRI", 606, 10);  /* 6 frames */
+    size_t nwords = nbytes / 4; int saw_far = 0;
+    for (size_t i = 0; i < nwords; i++) {
+        uint32_t w = be32(buf + i*4);
+        if (w == 0x30002001 && i+1 < nwords) {
+            uint32_t far = be32(buf + (i+1)*4); saw_far = 1;
+            if (!(far >= lo && far < hi)) {
+                fprintf(stderr, "[guard] REFUSED: FAR 0x%08x outside sandbox [0x%lx,0x%lx)\n", far, lo, hi);
+                return 0;
+            }
+        }
+        if ((w & 0xFF000000u) == 0x50000000u) {              /* Type2 FDRI */
+            uint32_t fn = w & 0x00FFFFFFu;
+            if (fn > maxf) {
+                fprintf(stderr, "[guard] REFUSED: FDRI %u words > max %lu\n", fn, maxf);
+                return 0;
+            }
+        }
+    }
+    if (!saw_far) { fprintf(stderr, "[guard] REFUSED: no FAR write found in seq\n"); return 0; }
+    return 1;
+}
+
 static uint8_t *slurp(const char *path, size_t *n) {
     FILE *f = fopen(path, "rb");
     if (!f) { perror(path); exit(2); }
@@ -185,6 +223,7 @@ int main(int argc, char **argv) {
     } else if (!strcmp(op, "writeseq")) {
         if (argc < 3) usage();
         size_t n; uint8_t *b = slurp(argv[2], &n);
+        if (!validate_seq(b, n)) { free(b); return 3; }
         printf("[*] writeseq %zu words from %s\n", n / 4, argv[2]);
         dump_regs();
         int w = wf_write(b, n);
@@ -195,6 +234,7 @@ int main(int argc, char **argv) {
     } else if (!strcmp(op, "edit")) {
         if (argc < 3) usage();
         size_t n; uint8_t *b = slurp(argv[2], &n);
+        if (!validate_seq(b, n)) { free(b); return 3; }   /* guard before touching PCAP_PR */
         uint32_t before = rd(gpio, 0);
         printf("[*] edit %s: GPIO before = 0x%08x (bit0=%u)\n",
                argv[2], before, before & 1u);

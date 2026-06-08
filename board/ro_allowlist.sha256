@@ -1,0 +1,7 @@
+# zynq-agentctl P2 — trusted ro_tune tap bitstreams (measured-load gate for full/U-Boot loads)
+f2f3f52b3664c692846361c7e2715d07cf56f4fb4aed6e350b04e80ede3777a5  tap0.bit
+265ab5be55dcae91fd0f38bab225a9cb37d7822ac5d29d774faa2b1dc053742e  tap1.bit
+9037045a6039d67b2ed9fb55e1f4bc2203f092902adc192b332d249b45a6a7dc  tap2.bit
+39b0c3f10db7bd1291197a544631504df180edbcf10493a7abb679616803e469  tap3.bit
+2373bf0ec090ece4ad4ce0a2c1cc7f906936449ad1faf9159c8bca24ce69e290  tap4.bit
+b0056399e46c0bb1768a43206aa2519ed9043666c18f8a1b21375951482bc6ed  tap5.bit
