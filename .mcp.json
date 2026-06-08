@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "zynq-agentctl": {
+      "command": "/home/test/zynq_agentctl/.env/bin/python",
+      "args": ["/home/test/zynq_agentctl/mcp/server.py"]
+    }
+  }
+}
