@@ -1,0 +1,6 @@
+# zynq_xpart M5 measured-boot allowlist -- SHA-256 of trusted bitstreams.
+# A bitstream whose hash is not listed here is refused by measured-load.py.
+ca09f3fe7e95f0ec8c1e4e068ca59cc985968d0788ebdcc9a5958b26086ee937  full-static+RM1-TPU
+c48a1eb289883f96a935f7877aa4b4012b8201bff4b61a2dc4584cc0330fd089  partial-RM1-real-TPU
+b5139ca893dd85b048790a0ac63f03067e4db994b6bce83aec7cb6b29d43c4c2  partial-RM2-alt-accel
+70b08678995c42dd12f16a69accaf960b07c2102eec2ad62881e7f2fef919181  partial-RM_LUT-A-weights0x5A

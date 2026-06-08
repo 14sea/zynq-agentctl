@@ -1,0 +1,16 @@
+# build artifacts
+firmware/icaphw
+firmware/*.o
+__pycache__/
+*.pyc
+
+# large binaries — bitstreams are reproducible from zynq_xpart/vivado/hwicap_lut
+board/*.bit
+
+# generated frame sequences (reproducible via host/hwicap-make-framewrite.py)
+seq/*.bin
+
+# local python venv if ever added (directory, not a dotenv)
+.env/
+board/*.bin
+board/*.dtb

@@ -1,0 +1,162 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (C) 2021 Michael Walle <michael@walle.cc>
+ */
+/dts-v1/;
+/include/ "zynq-7000.dtsi"
+
+/ {
+	model = "Ebang EBAZ4205";
+	compatible = "ebang,ebaz4205", "xlnx,zynq-7000";
+
+	aliases {
+		ethernet0 = &gem0;
+		serial0 = &uart1;
+	};
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x0 0x10000000>;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+};
+
+&clkc {
+	ps-clk-frequency = <33333333>;
+	fclk-enable = <9>;	/* +FCLK0 (bit0) for PL AXI under Linux */
+};
+
+&gem0 {
+	status = "okay";
+	phy-mode = "mii";
+	phy-handle = <&phy>;
+
+	/* PHY clock */
+	assigned-clocks = <&clkc 18>;
+	assigned-clock-rates = <25000000>;
+
+	phy: ethernet-phy@0 {
+		reg = <0>;
+	};
+};
+
+&gpio0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_gpio0_default>;
+};
+
+&nfc0 {
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	nand@0 {
+		reg = <0>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 { label = "nand-fsbl-uboot";  reg = <0x00000000 0x00300000>; };
+			partition@1 { label = "nand-linux";       reg = <0x00300000 0x00500000>; };
+			partition@2 { label = "nand-device-tree"; reg = <0x00800000 0x00020000>; };
+			partition@3 { label = "nand-rootfs";      reg = <0x00820000 0x00a00000>; };
+			partition@4 { label = "nand-jffs2";       reg = <0x01220000 0x01000000>; };
+			partition@5 { label = "nand-bitstream";   reg = <0x02220000 0x00800000>; };
+			partition@6 { label = "nand-allrootfs";   reg = <0x02a20000 0x04000000>; };
+			partition@7 { label = "nand-release";     reg = <0x06a20000 0x013e0000>; };
+			partition@8 { label = "nand-reserve";     reg = <0x07e00000 0x00200000>; };
+		};
+	};
+};
+
+&pinctrl0 {
+	pinctrl_gpio0_default: gpio0-default {
+		mux {
+			groups = "gpio0_20_grp", "gpio0_32_grp";
+			function = "gpio0";
+		};
+
+		conf {
+			groups = "gpio0_20_grp", "gpio0_32_grp";
+			io-standard = <3>;
+			slew-rate = <0>;
+		};
+
+		conf-pull-up {
+			pins = "MIO20", "MIO32";
+			bias-disable;
+		};
+	};
+
+	pinctrl_sdhci0_default: sdhci0-default {
+		mux {
+			groups = "sdio0_2_grp";
+			function = "sdio0";
+		};
+
+		conf {
+			groups = "sdio0_2_grp";
+			io-standard = <3>;
+			slew-rate = <0>;
+			bias-disable;
+		};
+
+		mux-cd {
+			groups = "gpio0_34_grp";
+			function = "sdio0_cd";
+		};
+
+		conf-cd {
+			groups = "gpio0_34_grp";
+			io-standard = <3>;
+			slew-rate = <0>;
+			bias-high-impedance;
+			bias-pull-up;
+		};
+	};
+
+	pinctrl_uart1_default: uart1-default {
+		mux {
+			groups = "uart1_4_grp";
+			function = "uart1";
+		};
+
+		conf {
+			groups = "uart1_4_grp";
+			io-standard = <3>;
+			slew-rate = <0>;
+		};
+
+		conf-rx {
+			pins = "MIO25";
+			bias-high-impedance;
+		};
+
+		conf-tx {
+			pins = "MIO24";
+			bias-disable;
+		};
+	};
+};
+
+&smcc {
+	status = "okay";
+};
+
+&sdhci0 {
+	status = "okay";
+	disable-wp;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_sdhci0_default>;
+};
+
+&uart1 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart1_default>;
+};
