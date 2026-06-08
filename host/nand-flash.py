@@ -19,13 +19,14 @@ import serial
 
 DEFAULT_LOAD_ADDR = 0x04000000
 
-# (name, path, nand_offset, partition_size_for_erase)
-# Paths are joined with --buildroot (default: build/buildroot). Use `../..`
-# to escape back to the repo root for non-buildroot artifacts like
-# backup/top.bit.
+# project root (this file is <root>/host/nand-flash.py) — keeps the script
+# self-contained, no hardcoded absolute paths.
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# (name, path-relative-to-ROOT, nand_offset, partition_size_for_erase)
 LAYOUT = [
-    ('dtb',       '/home/test/zynq_agentctl/board/zynq-ebaz4205.dtb', 0x00800000, 0x00020000),
-    ('bitstream', '/home/test/zynq_agentctl/board/lut_A.bin',         0x02220000, 0x00800000),
+    ('dtb',       'board/zynq-ebaz4205.dtb', 0x00800000, 0x00020000),
+    ('bitstream', 'board/lut_A.bin',         0x02220000, 0x00800000),
 ]
 
 PROMPT = b'zynq-uboot>'
@@ -95,15 +96,14 @@ def flash_one(port, name, file_path, nand_offset, part_size, load_addr, page_siz
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--port', default='/dev/ebaz-uart')
-    ap.add_argument('--buildroot', default='/home/test/xilinx/build/buildroot')
-    ap.add_argument('--only', help='comma-separated subset: uImage,dtb,rootfs')
+    ap.add_argument('--only', help='comma-separated subset: dtb,bitstream')
     args = ap.parse_args()
 
     only = set(args.only.split(',')) if args.only else None
     for name, rel, off, sz in LAYOUT:
         if only and name not in only:
             continue
-        flash_one(args.port, name, os.path.join(args.buildroot, rel), off, sz, DEFAULT_LOAD_ADDR)
+        flash_one(args.port, name, os.path.join(ROOT, rel), off, sz, DEFAULT_LOAD_ADDR)
 
     print("\nALL DONE — issue `reset` at U-Boot prompt to boot the new system.")
 
