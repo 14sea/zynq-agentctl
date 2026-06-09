@@ -33,6 +33,32 @@ Executor path = **Linux `/dev/mem` + HWICAP** (no A9 AMP, no soft-core in the lo
 
 `icap_clk` must be wired on `axi_hwicap` (it is, in `lut_A/B.bit`).
 
+## Phases & docs
+
+The loop was built up in phases, all hardware-verified on the EBAZ4205:
+
+- **Live LUT-INIT edit (P1)** — the *fine* action: rewrite one LUT6 INIT bit over
+  ICAP, no reset. `agentctl.py act/loop` — [docs/loop.md](docs/loop.md).
+- **Adaptive RO-frequency loop (Phase-2 P1)** — a tunable ring oscillator; the agent
+  drives its frequency to a target by measuring and searching tap settings with **no
+  pre-known map**, plus drift self-repair via `watch`. `host/ro_adapt.py` —
+  [docs/adapt.md](docs/adapt.md).
+- **Safety guard (Phase-2 P2)** — `firmware/icaphw.c` structurally refuses any ICAP
+  write outside the sandbox frames; `host/frameguard.py` mirrors the check host-side;
+  `board/*allowlist.sha256` are sha256 measured-load gates.
+- **DFX coarse hot-swap (P3)** — the *coarse* action: swap a whole reconfigurable
+  module via Linux partial reconfig. `agentctl.py load-module` — [docs/dfx.md](docs/dfx.md).
+- **MCP server (Phase-2 P4)** — exposes the arm (`board_status` / `measure_freq` /
+  `set_tap` / `adapt_freq`) as MCP tools so any client can drive it. `mcp/server.py`,
+  `.mcp.json` — [docs/mcp.md](docs/mcp.md).
+
+> The drift self-repair is exercised via **fault injection** (a forced tap change):
+> a real *thermal* swing can't be induced on this RO safely — cooling an idle die has
+> no headroom and PS CPU-load heat doesn't reach the PL RO site (only direct chip
+> heating would). The repair control loop is identical either way.
+
+Roadmap & full plan: [docs/plan.md](docs/plan.md).
+
 ## Layout
 
 - `firmware/icaphw.c` — board-side `/dev/mem` HWICAP executor (the only from-scratch code).
@@ -47,6 +73,13 @@ Executor path = **Linux `/dev/mem` + HWICAP** (no A9 AMP, no soft-core in the lo
 - `host/bit2bin.py` — convert a Vivado `.bit` to the byte-swapped `.bin` the Linux
   `fpga_manager` requires (it rejects a raw `.bit`: "must be a byte swapped .bin file").
   `board/lut_A.bin` is produced from `board/lut_A.bit` this way.
+- `host/ro_adapt.py` — adaptive RO loop (`sweep`/`measure`/`set`/`adapt`/`watch`);
+  `host/lut-tune.py` builds the per-tap multi-frame ICAP set-sequences.
+- `host/frameguard.py` / `host/measured-load.py` — host-side safety mirrors
+  (frame-range guard pre-check + sha256 allowlist gate).
+- `rtl/ro_tune.v`, `vivado/ro_tune/` — the tunable ring-oscillator design + per-tap
+  bitstream generation (`gen_taps.tcl`).
+- `mcp/server.py`, `mcp/test_client.py`, `.mcp.json` — MCP wrapper exposing the loop as tools.
 - `host/uart-*.py`, `host/uboot-intercept.py` — UART plumbing + recovery (copied from xilinx bring-up).
 - `board/lut_A.bit` / `lut_B.bit` — HWICAP+GPIO demonstrator bitstreams (INIT[0]=0 / =1).
 - `seq/seqAB.bin` / `seqBA.bin` — generated frame write sequences (INIT 0↔1).
