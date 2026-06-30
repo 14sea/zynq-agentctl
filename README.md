@@ -8,6 +8,10 @@ This is **Form A**: the agent runs on the host (WSL); the board is the actuator,
 driven over UART. The host-side Claude session *is* the agent. Form B (agent
 running on-board + networking over UART-PPP) is a roadmap only — see `docs/plan.md`.
 
+## License
+
+Apache-2.0 (see `LICENSE` / `NOTICE`). NEORV32 (BSD-3) and prjxray/Vivado are external tools (fetched/used, not vendored).
+
 ## Architecture
 
 ```

@@ -1,0 +1,18 @@
+zynq_agentctl — an agent controlling the live FPGA state of the EBAZ4205 via ICAP
+Copyright 2026 14sea
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party components (NOT vendored in this repository; fetched/used separately):
+
+- Project X-Ray / prjxray + its database (f4pga) — used as an external tool for
+  locating LUT-INIT config bits; not redistributed here.
+- Xilinx Vivado 2025.2 — proprietary build tool; not redistributed.
+- Model Context Protocol (MCP) — the mcp/ server exposes the actuator as MCP tools;
+  the protocol/SDK are used, not vendored.
+- Buildroot ARM cross-toolchain (for firmware/icaphw.c) — used as an external tool.
+
+Portions are copied/ported from the sibling project zynq-xpart and the EBAZ4205
+bring-up workspace (same author, same Apache-2.0 terms); those source projects are
+never modified by this repository. Generated bitstreams / frame sequences / device
+trees are gitignored and not distributed.
