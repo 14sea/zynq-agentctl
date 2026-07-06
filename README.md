@@ -47,9 +47,16 @@ The loop was built up in phases, all hardware-verified on the EBAZ4205:
   drives its frequency to a target by measuring and searching tap settings with **no
   pre-known map**, plus drift self-repair via `watch`. `host/ro_adapt.py` —
   [docs/adapt.md](docs/adapt.md).
-- **Safety guard (Phase-2 P2)** — `firmware/icaphw.c` structurally refuses any ICAP
-  write outside the sandbox frames; `host/frameguard.py` mirrors the check host-side;
-  `board/*allowlist.sha256` are sha256 measured-load gates.
+- **Safety guard (Phase-2 P2)** — two enforcement levels, don't conflate them:
+  the *fine* path (ICAP LUT edits) is guarded **structurally, board-side**:
+  `firmware/icaphw.c` refuses any ICAP write outside the sandbox frames
+  (`host/frameguard.py` is an optional host-side pre-check mirror, not in the
+  automatic path). sha256 **measured-load gates**: `board/dfx_allowlist.sha256`
+  is enforced automatically by `agentctl.py load-module` (unlisted partials are
+  REFUSED); `board/allowlist.sha256` and `board/ro_allowlist.sha256` are
+  allowlists for *full* bitstream loads, checked via the standalone
+  `host/measured-load.py --allowlist <file>` (opt-in tool, nothing invokes it
+  implicitly).
 - **DFX coarse hot-swap (P3)** — the *coarse* action: swap a whole reconfigurable
   module via Linux partial reconfig. `agentctl.py load-module` — [docs/dfx.md](docs/dfx.md).
 - **MCP server (Phase-2 P4)** — exposes the arm (`board_status` / `measure_freq` /
@@ -87,6 +94,30 @@ Roadmap & full plan: [docs/plan.md](docs/plan.md).
 - `host/uart-*.py`, `host/uboot-intercept.py` — UART plumbing + recovery (copied from xilinx bring-up).
 - `board/lut_A.bit` / `lut_B.bit` — HWICAP+GPIO demonstrator bitstreams (INIT[0]=0 / =1).
 - `seq/seqAB.bin` / `seqBA.bin` — generated frame write sequences (INIT 0↔1).
+
+## Fresh clone: reproducing the untracked artifacts
+
+This repo is **source-only**: bitstreams, byte-swapped `.bin`s, frame sequences
+and Vivado build outputs are gitignored (see `.gitignore`). A fresh clone runs
+the host tools but has no board payloads until you regenerate them:
+
+| Artifact (gitignored)              | Regenerate with |
+|------------------------------------|-----------------|
+| `firmware/icaphw`                  | `make -C firmware` (default `CC` = the ebaz4205-bringup Buildroot toolchain; override with `CC=<your-armv7-linux-gcc>`) |
+| `board/lut_A.bit` / `lut_B.bit`    | Vivado on `zynq_xpart/vivado/hwicap_lut` (external repo — the HWICAP+GPIO demonstrator lives there) |
+| `board/lut_A.bin`                  | `host/bit2bin.py board/lut_A.bit board/lut_A.bin` |
+| `seq/seqAB.bin` / `seqBA.bin`      | `host/hwicap-make-framewrite.py` from `lut_A.bit`/`lut_B.bit` |
+| `vivado/ro_tune/build/tap0..5.bit` | two steps: `vivado -mode batch -source vivado/ro_tune/build_ro_tune.tcl` (creates + routes `build/ro_tune.xpr`; RTL is in-repo: `rtl/ro_tune.v`), **then** `vivado -mode batch -source vivado/ro_tune/gen_taps.tcl` (re-opens that project, stamps the 6 tap INITs) |
+| `seq/set_tap0..5.bin`              | `for k in 0 1 2 3 4 5; do host/lut-tune.py vivado/ro_tune/build/tap$k.bit vivado/ro_tune/build/tap0.bit vivado/ro_tune/build/tap5.bit 0x1420 seq/set_tap$k.bin; done` — `0x1420` is the tune_lut INIT-frame FAR of the *shipped* placement; a re-placed rebuild needs its new FAR (locate once via prjxray `bitread`; not a runtime dependency of the script) |
+| `board/dfx/*` (static + partials)  | `vivado/dfx/build_dfx.tcl` — **depends on RTL from the sibling `zynq_xpart` repo** (github.com/14sea/zynq-xpart); clone it next to this repo first |
+
+Board-side prerequisites are pushed over UART per session (`/tmp` is tmpfs):
+`agentctl.py setup` pushes the fine-path set (`icaphw`, `seqAB.bin`, `seqBA.bin`)
+automatically; the RO/MCP path needs a manual push of `icaphw` +
+`seq/set_tap0..5.bin` — see `docs/adapt.md` "Per-session board prep" for the
+exact commands. Hashes of known-good full bitstreams are recorded in
+`board/allowlist.sha256` / `board/ro_allowlist.sha256` so regenerated ones can
+be verified with `host/measured-load.py`.
 
 ## Provenance
 

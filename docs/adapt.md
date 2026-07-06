@@ -19,7 +19,19 @@ phase-1's "execute a known edit" to "discover the edit that meets a goal".
 1. Load `ro_tune` into PL via **U-Boot `fpga loadb`** (reliable; Linux fpgautil can
    wedge DEVCFG): `uboot-fpga-load.py --bit vivado/ro_tune/build/tap0.bit --op loadb`,
    then custom-boot Linux preserving it (skip nandboot's own fpga loadb, add
-   `clk_ignore_unused` — already in the dtb fix). 2. Push `icaphw` + `set_tap0..5.bin`.
+   `clk_ignore_unused` — already in the dtb fix).
+2. Push the executor + the six tap sequences (`/tmp` is tmpfs — redo after every
+   boot; `agentctl.py setup` does NOT cover these, it pushes the fine-path set):
+   ```bash
+   P=.env/bin/python   # or any python with pyserial
+   $P host/uart-push-b64.py --in firmware/icaphw --dest /tmp/icaphw
+   for k in 0 1 2 3 4 5; do
+     $P host/uart-push-b64.py --in seq/set_tap$k.bin --dest /tmp/set_tap$k.bin
+   done
+   # on the board: chmod +x /tmp/icaphw
+   ```
+   (`seq/set_tap*.bin` are gitignored — regenerate via `host/lut-tune.py` from the
+   tap bitstreams; see README "Fresh clone".)
 
 ## Verified (2026-06-08, hardware)
 Frequency map (count/524µs window, ~FCLK0 125MHz): tap0≈103.5k, tap1≈101.4k,

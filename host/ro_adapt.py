@@ -14,10 +14,10 @@ multi-frame ICAP "set tap k" sequences from host/lut-tune.py).
   ro_adapt.py adapt <target> [tol]  search taps to hit target count (+/- tol)
   ro_adapt.py watch <target> [tol]  hold target; re-adapt when it drifts out
 """
-import argparse, re, statistics, sys, time
+import argparse, os, re, statistics, sys, time
 import serial
 
-PORT = "/dev/ebaz-uart"
+PORT = os.environ.get("EBAZ_UART", "/dev/ebaz-uart")
 BAUD = 115200
 ICAPHW = "/tmp/icaphw"
 NTAP = 6
@@ -119,7 +119,7 @@ def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="op", required=True)
     sub.add_parser("sweep"); sub.add_parser("measure")
-    p = sub.add_parser("set"); p.add_argument("k", type=int)
+    p = sub.add_parser("set"); p.add_argument("k", type=int, choices=range(NTAP))
     for v in ("adapt", "watch"):
         q = sub.add_parser(v); q.add_argument("target", type=int)
         q.add_argument("tol", type=int, nargs="?", default=1500)

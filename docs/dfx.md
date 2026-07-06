@@ -41,7 +41,11 @@ Full bitstreams are loaded via **U-Boot `fpga loadb`** (reliable; a Linux
 custom-boot into Linux **without** re-loading the PL:
 
 ```bash
-# 1) SLCR-reset to U-Boot (hammer 'd'), see CLAUDE.md recipe
+# 1) SLCR-reset to U-Boot: hammer 'd' on UART while soft-resetting the PS
+#    (full recipe in the ebaz4205-bringup repo, github.com/14sea/ebaz4205-bringup):
+#      python host/uboot-intercept.py --duration 25 &
+#      openocd -f board/ebaz4205.cfg -c init -c halt \
+#        -c "mww phys 0xF8000008 0xDF0D" -c "mww phys 0xF8000200 1" -c shutdown
 # 2) load static+RM1 over UART ymodem (~4 min):
 .env/bin/python host/uboot-fpga-load.py --bit board/dfx/dfx_full.bit \
     --op loadb --read 0x41200000        # -> md shows 0x001E0046

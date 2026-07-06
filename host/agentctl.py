@@ -34,7 +34,9 @@ BAUD = 115200
 # fix (DTB fclk-enable=<9>, flashed to nand-device-tree) keeps the PL AXI clocked
 # so fpgautil + /dev/mem actually work under Linux.
 BIT = "/tmp/lut_A.bin"
-MTD5_BLOCKS = 509  # 509*4096 = 2084864 = our lut_A.bin in mtd5
+MTD5_BLOCKS = 509  # ceil(2083740/4096): lut_A.bin is 2083740 B; the dd reads
+                   # 509*4096 = 2084864 B (page-aligned, trailing 0xFF NAND pad
+                   # past EOF — fpga_manager accepts the padded image)
 ICAPHW = "/tmp/icaphw"
 SEQ_SET = "/tmp/seqAB.bin"   # INIT[0] 0 -> 1
 SEQ_CLR = "/tmp/seqBA.bin"   # INIT[0] 1 -> 0

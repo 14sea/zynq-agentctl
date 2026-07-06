@@ -10,8 +10,10 @@ with no reset. All hardware-verified on the EBAZ4205 (XC7Z010), 2026-06-08.
   (= FCLK0 + FCLK3). The stock board dts used `<8>` (FCLK3 only), so Linux
   `clk_disable_unused` gated **FCLK0** → the PL AXI interconnect (clocked by
   FCLK0) froze → every PL-AXI access hung the A9 hard. `<9>` keeps FCLK0 on.
-- **`nand-bitstream` (mtd5)** holds `lut_A.bin` (byte-swapped .bin, 2084864 B =
-  509×4096). Loaded at runtime with `dd if=/dev/mtd5 bs=4096 count=509` + fpgautil.
+- **`nand-bitstream` (mtd5)** holds `lut_A.bin` (byte-swapped .bin, 2083740 B).
+  Loaded at runtime with `dd if=/dev/mtd5 bs=4096 count=509` + fpgautil — the dd
+  reads 509×4096 = 2084864 B (page-aligned; the ~1 KB past EOF is 0xFF NAND pad,
+  which fpga_manager accepts).
 
 Rebuild the dtb: `host/bit2bin.py` is unrelated; the dtb is built with the kernel
 `scripts/dtc/dtc` from `board/dts/zynq-ebaz4205.dts` (the one-line `<8>`→`<9>` edit).
@@ -22,7 +24,7 @@ error-corrected — reliable for 2 MB unlike the base64 UART push).
 
 ```bash
 cd /home/test/zynq_agentctl
-P=/home/test/xilinx/.env/bin/python
+P=.env/bin/python    # repo venv (see docs/mcp.md Setup); any python with pyserial works
 $P host/agentctl.py ensure-linux     # boot to Linux root shell if needed
 $P host/agentctl.py setup            # push icaphw+seqs; dd mtd5 -> fpgautil; health
 $P host/agentctl.py perceive         # read LUT INIT[0]

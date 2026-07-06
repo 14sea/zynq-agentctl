@@ -16,7 +16,7 @@ import argparse, base64, hashlib, os, sys, time
 import serial
 
 ap = argparse.ArgumentParser()
-ap.add_argument('--port', default='/dev/ebaz-uart')
+ap.add_argument('--port', default=os.environ.get('EBAZ_UART', '/dev/ebaz-uart'))
 ap.add_argument('--baud', type=int, default=115200)
 ap.add_argument('--in', dest='infile', required=True)
 ap.add_argument('--dest', required=True, help='destination path on board')
